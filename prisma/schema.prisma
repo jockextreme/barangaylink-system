@@ -1,0 +1,535 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String        @id @default(uuid())
+  email           String        @unique
+  password        String
+  firstName       String
+  lastName        String
+  role            UserRole      @default(MEMBER)
+  contactNumber   String?
+  address         String?
+  birthDate       DateTime?
+  avatar          String?
+  isVerified      Boolean       @default(false)
+  verificationToken String?
+  resetToken      String?
+  resetExpires    DateTime?
+  
+  requests        Request[]
+  volunteer       VolunteerProfile?
+  donations       Donation[]
+  messagesSent    Message[]
+  messagesReceived Message[]
+  notifications   Notification[]
+  activityLogs    ActivityLog[]
+  events          Event[]
+  announcements   Announcement[]
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  @@index([email])
+  @@index([role])
+  @@index([isVerified])
+}
+
+enum UserRole {
+  GUEST
+  MEMBER
+  VOLUNTEER
+  MODERATOR
+  ADMIN
+}
+
+model Request {
+  id              String        @id @default(uuid())
+  title           String
+  description     String
+  category        RequestCategory
+  priority        PriorityLevel @default(MEDIUM)
+  aiPriorityScore Float?        
+  status          RequestStatus @default(PENDING)
+  location        String?       
+  address         String?
+  userId          String
+  assignedToId    String?
+  files           String[]      
+  
+  user            User          @relation(fields: [userId], references: [id])
+  assignedTo      User?         @relation("AssignedRequests", fields: [assignedToId], references: [id])
+  updates         RequestUpdate[]
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  @@index([category])
+  @@index([status])
+  @@index([priority])
+  @@index([aiPriorityScore])
+  @@index([userId])
+  @@index([assignedToId])
+}
+
+enum RequestCategory {
+  MEDICAL
+  FOOD
+  EDUCATION
+  EMERGENCY
+  INFRASTRUCTURE
+  LEGAL
+  FINANCIAL
+  OTHER
+}
+
+enum PriorityLevel {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum RequestStatus {
+  PENDING
+  IN_PROGRESS
+  RESOLVED
+  CANCELLED
+}
+
+model RequestUpdate {
+  id          String   @id @default(uuid())
+  requestId   String
+  description String
+  status      RequestStatus
+  createdById String
+  files       String[]
+  
+  request     Request  @relation(fields: [requestId], references: [id])
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([requestId])
+  @@index([createdById])
+}
+
+model VolunteerProfile {
+  id          String    @id @default(uuid())
+  userId      String    @unique
+  skills      String[]
+  interests   String[]
+  availability String?  
+  totalHours  Int       @default(0)
+  isActive    Boolean   @default(true)
+  rating      Float?    @default(5.0)
+  
+  user        User      @relation(fields: [userId], references: [id])
+  events      EventRegistration[]
+  assignments Request[]
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  @@index([isActive])
+  @@index([skills])
+}
+
+model Event {
+  id          String    @id @default(uuid())
+  title       String
+  description String
+  type        EventType
+  date        DateTime
+  endDate     DateTime?
+  location    String
+  maxAttendees Int?
+  status      EventStatus @default(UPCOMING)
+  createdById String
+  image       String?
+  
+  createdBy   User      @relation(fields: [createdById], references: [id])
+  registrations EventRegistration[]
+  announcements Announcement[]
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  @@index([status])
+  @@index([type])
+  @@index([date])
+}
+
+enum EventType {
+  COMMUNITY
+  DISASTER_RESPONSE
+  YOUTH
+  TRAINING
+  FUNDRAISING
+  RELIGIOUS
+  CLEANUP
+  MEDICAL_MISSION
+}
+
+enum EventStatus {
+  UPCOMING
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+model EventRegistration {
+  id          String  @id @default(uuid())
+  eventId     String
+  volunteerId String
+  status      RegistrationStatus @default(REGISTERED)
+  attended    Boolean @default(false)
+  checkInTime DateTime?
+  checkOutTime DateTime?
+  
+  event       Event   @relation(fields: [eventId], references: [id])
+  volunteer   VolunteerProfile @relation(fields: [volunteerId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@unique([eventId, volunteerId])
+  @@index([eventId])
+  @@index([volunteerId])
+  @@index([status])
+  @@index([attended])
+}
+
+enum RegistrationStatus {
+  REGISTERED
+  CANCELLED
+  WAITLISTED
+  NO_SHOW
+}
+
+model Donation {
+  id          String      @id @default(uuid())
+  type        DonationType
+  amount      Float?
+  description String
+  donorId     String
+  campaignId  String?
+  status      DonationStatus @default(PENDING)
+  receiptUrl  String?
+  notes       String?
+  
+  donor       User        @relation(fields: [donorId], references: [id])
+  campaign    Campaign?   @relation(fields: [campaignId], references: [id])
+  
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  @@index([donorId])
+  @@index([campaignId])
+  @@index([status])
+  @@index([type])
+}
+
+enum DonationType {
+  CASH
+  FOOD
+  CLOTHING
+  MEDICINE
+  EQUIPMENT
+  OTHER
+}
+
+enum DonationStatus {
+  PENDING
+  RECEIVED
+  DISTRIBUTED
+  CANCELLED
+}
+
+model Campaign {
+  id          String    @id @default(uuid())
+  title       String
+  description String
+  targetAmount Float?
+  currentAmount Float   @default(0)
+  endDate     DateTime?
+  status      CampaignStatus @default(ACTIVE)
+  createdById String
+  image       String?
+  
+  createdBy   User      @relation(fields: [createdById], references: [id])
+  donations   Donation[]
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  @@index([status])
+  @@index([createdById])
+}
+
+enum CampaignStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  ARCHIVED
+}
+
+model Announcement {
+  id          String    @id @default(uuid())
+  title       String
+  content     String
+  type        AnnouncementType
+  priority    PriorityLevel @default(MEDIUM)
+  isPinned    Boolean   @default(false)
+  scheduleAt  DateTime?
+  createdById String
+  eventId     String?
+  
+  createdBy   User      @relation(fields: [createdById], references: [id])
+  event       Event?    @relation(fields: [eventId], references: [id])
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  @@index([type])
+  @@index([isPinned])
+  @@index([createdById])
+  @@index([priority])
+}
+
+enum AnnouncementType {
+  GENERAL
+  EMERGENCY
+  EVENT
+  DONATION
+  UPDATE
+  ALERT
+}
+
+model Message {
+  id          String    @id @default(uuid())
+  content     String
+  senderId    String
+  receiverId  String?
+  groupId     String?
+  isRead      Boolean   @default(false)
+  messageType MessageType @default(TEXT)
+  
+  sender      User      @relation("SentMessages", fields: [senderId], references: [id])
+  receiver    User?     @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  group       Group?    @relation(fields: [groupId], references: [id])
+  
+  createdAt   DateTime  @default(now())
+  
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([groupId])
+  @@index([isRead])
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
+  SYSTEM
+}
+
+model Group {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  type        GroupType
+  adminId     String
+  avatar      String?
+  
+  admin       User      @relation(fields: [adminId], references: [id])
+  members     GroupMember[]
+  messages    Message[]
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  @@index([type])
+  @@index([adminId])
+}
+
+enum GroupType {
+  VOLUNTEERS
+  YOUTH
+  COMMITTEE
+  EMERGENCY
+  GENERAL
+  PROJECT_TEAM
+}
+
+model GroupMember {
+  id        String  @id @default(uuid())
+  groupId   String
+  userId    String
+  role      GroupRole @default(MEMBER)
+  joinedAt  DateTime @default(now())
+  
+  group     Group   @relation(fields: [groupId], references: [id])
+  user      User    @relation(fields: [userId], references: [id])
+  
+  @@unique([groupId, userId])
+  @@index([groupId])
+  @@index([userId])
+  @@index([role])
+}
+
+enum GroupRole {
+  MEMBER
+  MODERATOR
+  ADMIN
+}
+
+model Notification {
+  id          String        @id @default(uuid())
+  userId      String
+  type        NotificationType
+  title       String
+  message     String
+  isRead      Boolean       @default(false)
+  link        String?
+  metadata    Json?         
+  
+  user        User          @relation(fields: [userId], references: [id])
+  
+  createdAt   DateTime      @default(now())
+  
+  @@index([userId])
+  @@index([isRead])
+  @@index([type])
+  @@index([createdAt])
+}
+
+enum NotificationType {
+  REQUEST_UPDATE
+  EVENT_REMINDER
+  DONATION_RECEIVED
+  NEW_MESSAGE
+  ANNOUNCEMENT
+  SYSTEM
+  VOLUNTEER_ASSIGNMENT
+  EMERGENCY_ALERT
+}
+
+model ActivityLog {
+  id          String    @id @default(uuid())
+  userId      String
+  action      String
+  entityType  String
+  entityId    String?
+  details     Json?
+  ipAddress   String?
+  userAgent   String?
+  
+  user        User      @relation(fields: [userId], references: [id])
+  
+  createdAt   DateTime  @default(now())
+  
+  @@index([userId])
+  @@index([action])
+  @@index([entityType])
+  @@index([createdAt])
+}
+
+model EmergencyAlert {
+  id          String    @id @default(uuid())
+  title       String
+  description String
+  type        EmergencyType
+  severity    AlertSeverity
+  location    String
+  coordinates String?   // JSON: {lat, lng}
+  status      AlertStatus @default(ACTIVE)
+  createdById String
+  
+  createdBy   User      @relation(fields: [createdById], references: [id])
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  @@index([type])
+  @@index([severity])
+  @@index([status])
+  @@index([createdById])
+}
+
+enum EmergencyType {
+  FLOOD
+  EARTHQUAKE
+  FIRE
+  TYPHOON
+  MEDICAL
+  SECURITY
+  OTHER
+}
+
+enum AlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AlertStatus {
+  ACTIVE
+  RESOLVED
+  CANCELLED
+}
+
+model Resource {
+  id          String    @id @default(uuid())
+  name        String
+  category    ResourceCategory
+  quantity    Int       @default(0)
+  unit        String
+  location    String
+  minLevel    Int       @default(10)
+  maxLevel    Int       @default(100)
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  @@index([category])
+  @@index([location])
+}
+
+enum ResourceCategory {
+  FOOD
+  WATER
+  MEDICINE
+  CLOTHING
+  SHELTER
+  EQUIPMENT
+  OTHER
+}
+
+model AuditLog {
+  id          String    @id @default(uuid())
+  userId      String?
+  action      String
+  entityType  String
+  entityId    String?
+  oldData     Json?
+  newData     Json?
+  ipAddress   String?
+  userAgent   String?
+  
+  user        User?     @relation(fields: [userId], references: [id])
+  
+  createdAt   DateTime  @default(now())
+  
+  @@index([userId])
+  @@index([action])
+  @@index([entityType])
+  @@index([createdAt])
+}
